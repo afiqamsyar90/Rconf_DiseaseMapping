@@ -1,0 +1,222 @@
+---
+title: "Tmap"
+format: html
+---
+
+We will map the HFMD cases notified in Pulau Pinang in 2022
+
+# Packages installation and load
+
+```{r}
+library(tmap) ## thematic maps in R
+library(sf) ## simple feature creation for mapping
+library(readxl) ## to load data
+library(here) ## read data
+library(dplyr) ##data wrangling
+```
+
+# Part 1
+
+## Importing the data
+
+```{r}
+data("World") #open source map in SF package
+```
+
+Now that we have the map, we can plot the "World" map by using function tm_shape. 
+tm_shape will determine the layer of map that we wan to plot as base map. 
+
+## tm_polygon determine which variable that we want to show on the chloropleth map
+
+```{r}
+tm_shape(World) +
+  tm_polygons("life_exp")
+```
+
+World map produced, however the breaks and scales used were not really show any differences
+
+## We need to modify it with (break = ) functions in the package.
+
+```{r}
+tm_shape(World) +
+  tm_polygons("life_exp",
+              breaks = c (0, 30, 40, 50, 60,70,80, Inf))
+```
+
+## Lets customize the map to make it more informative and reader's friendly
+
+```{r}
+tm_shape(World) +
+  tm_polygons("life_exp",
+              title = "Life Expectancy" , ## add title to the legend
+              breaks = c (0, 30, 40, 50, 60,70,80, Inf)) +
+    tm_borders() ## add borders on the map 
+
+```
+
+We can view it in dynamic map view
+Just need to activate and shif the plotting mode into view mode
+
+## Activate "view" mode
+
+```{r}
+tmap_mode("view")
+```
+
+Rerun the map
+We can click on the map or zoom-in the area/ country
+in this example, population density information will be appear once we click any country
+
+## Plot the map
+```{r}
+tm_shape(World) +
+  tm_polygons("life_exp",
+              title = "Life Expectancy" , ## add title to the legend
+              breaks = c (0, 30, 40, 50, 60,70,80, Inf)) +
+    tm_borders() ## add borders on the map 
+
+```
+
+## we can edit the pop-up to make it more readers-friendly
+
+```{r}
+tm_shape(World) +
+  tm_polygons("life_exp",
+              title = "Life Expectancy" , ## add title to the legend
+               breaks = c (0, 30, 40, 50, 60,70,80, Inf),
+              id = "name",
+              popup.vars = c("Country" = "name","Life_Expectancy" = "life_exp", "Pop_Density" = "pop_est_dens")) +
+    tm_borders() ## add borders on the map 
+```
+
+# Part 2
+
+## Lets map the disease
+
+We need base map (area of interest) and data of the cases including the coordinates
+
+## Load the case data
+
+```{r}
+Case <- read_excel("CASE.xlsx")
+```
+
+```{r}
+glimpse(Case)
+```
+
+## Convert the case data to an SF object
+
+```{r}
+Case_1 <- st_as_sf(Case,coords = c("LONGITUDE","LATITUDE"), 
+                    crs = 4326)  ## give coordinate referral system 
+Case_1 <- st_transform(Case_1, 3168) ## Transform the CRS into Kertau format
+```
+
+## Plot the case
+
+```{r}
+tm_shape(Case_1) + 
+  tm_dots(col = "black")
+```
+
+## Load the base map
+
+```{r}
+Penang <- st_read(here("Penang", 
+                  "mukim2000_penang1.shp"))
+```
+
+## Give CRS to base map (similar to case data)
+
+```{r}
+st_crs(Penang)<-3168  ## Transform the CRS into Kertau format
+```
+
+## Plotting mode
+```{r}
+tmap_mode("plot") ## plotting mode
+```
+
+## Now that we have both cases and base map, we can plot the cases on the map
+
+```{r}
+tm_shape(Penang) +  ## The base map layer
+  tm_polygons("NAMA_DP", 
+              title = "HFMD Cases in Pulau Pinang 2022",
+              title.size = 10) +
+  tm_shape(Case_1) +  ## the case layer
+  tm_dots(col = "black")+ ## use tm_dots to represent each case
+  tm_layout(legend.outside = TRUE)
+```
+
+We can plot the cases according to specific district
+
+## We just need to adjust the layer
+
+```{r}
+tm_shape(Penang[Penang$NAMA_DP == "SP.TENGAH",])+ ## specify the district
+  tm_polygons("NAMMUK",
+              title = "HFMD Cases in SP.TENGAH in 2022")+
+  tm_shape(Case_1[Case_1$DAERAH == "SEBERG PERAI TENGAH",])+ ## specify the district in 2nd ayer
+  tm_dots (col = "black") +  ## use tm_dots to represent each case
+  tm_layout(legend.outside = TRUE)
+```
+
+We also can make direct comparison between groups (eg: gender) by using tm_facet function
+
+## Tm_Facet function
+
+```{r}
+tm_shape(Penang) +  ## The base map layer
+  tm_polygons("NAMA_DP", 
+              title = "HFMD Cases in Pulau Pinang 2022",
+              title.size = 10) +
+  tm_shape(Case_1) +  ## the case layer
+  tm_dots(col = "black")+   ## use tm_dots to represent each case
+  tm_layout(legend.outside = TRUE) +
+  tm_facets("GENDER", ncol = 2) 
+```
+
+Now, we can try it for areal data too (mapping the incidence rate)
+
+## Lets load the data
+
+```{r}
+Case_2 <- read_excel( "Case_Sub.xlsx")
+Case_3 <- merge(Penang, Case_2, by = c("NAMA_DP", "NAMMUK"))  
+Incidence <- Case_3 %>% mutate(Incidence_Rate = (n/PENDUDUK)*1000)
+```
+
+```{r}
+glimpse(Incidence)
+```
+
+## Plot the incidence
+
+```{r}
+tm_shape(Incidence) +
+  tm_polygons("Incidence_Rate",
+              title = "Incidence of HFMD Pulau Pinang 2022",
+              title.size = 1,
+             breaks = c (0,6,9,12,18, Inf)) +
+    tm_compass(type = "4star", size = 2, position = c("left", "top")) + 
+  tm_layout(legend.outside = TRUE)
+```
+
+## Lets make it dynamic
+
+```{r}
+tmap_mode("view")
+```
+
+```{r}
+tm_shape(Incidence) +
+  tm_polygons("Incidence_Rate",
+              title = "Incidence of HFMD Pulau Pinang 2022",
+              title.size = 1,
+             breaks = c (0,6,9,12,18, Inf),
+             id = "NAMA_DP",
+              popup.vars = c("Subdistrict" = "NAMMUK","Case" = "n", "Incidence" = "Incidence_Rate")) +
+    tm_borders() ## add borders on the map 
+```
